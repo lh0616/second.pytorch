@@ -248,11 +248,14 @@ class VoxelNet(nn.Module):
         importance = example['importance']
 
         anchors = example["anchors"]
-        anchors_mask = example["anchors_mask"]
         gt_dict = example["gt_dict"]
         matched_thresholds = example["matched_thresholds"]
         unmatched_thresholds = example["unmatched_thresholds"]
         anchors_dict = example["anchors_dict"]
+        if "anchors_mask" not in example:
+            anchors_mask = [None] * batch_size_dev
+        else:
+            anchors_mask = example["anchors_mask"].view(batch_size_dev, -1)
         anchors_refined = self._box_coder.decode_torch(box_refine, anchors)
         targets_dict = self.target_assigner.assign(
             anchors_refined,
