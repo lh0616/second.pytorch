@@ -242,10 +242,13 @@ class VoxelNet(nn.Module):
         box_preds = preds_dict["box_preds"]
         cls_preds = preds_dict["cls_preds"]
         batch_size_dev = cls_preds.shape[0]
+        encode_size = box_preds.shape[-1]
         self.start_timer("loss forward")
         labels = example['labels']
         reg_targets = example['reg_targets']
         importance = example['importance']
+        refined_reg_targets = reg_targets - box_refine.view(batch_size_dev, -1, encode_size)
+
         self.start_timer("prepare weight forward")
         cls_weights, reg_weights, cared = prepare_loss_weights(
             labels,
@@ -287,7 +290,7 @@ class VoxelNet(nn.Module):
             cls_preds=cls_preds,
             cls_targets=cls_targets,
             cls_weights=cls_weights * importance,
-            reg_targets=reg_targets,
+            reg_targets=refined_reg_targets,
             reg_weights=reg_weights * importance,
             num_class=self._num_class,
             encode_rad_error_by_sin=self._encode_rad_error_by_sin,
@@ -399,18 +402,6 @@ class VoxelNet(nn.Module):
             return res
 
     def predict(self, example, preds_dict):
-        """start with v1.6.0, this function don't contain any kitti-specific code.
-        Returns:
-            predict: list of pred_dict.
-            pred_dict: {
-                box3d_lidar: [N, 7] 3d box.
-                scores: [N]
-                label_preds: [N]
-                metadata: meta-data which contains dataset-specific information.
-                    for kitti, it contains image idx (label idx), 
-                    for nuscenes, sample_token is saved in it.
-            }
-        """
         batch_size = example['anchors'].shape[0]
         if "metadata" not in example or len(example["metadata"]) == 0:
             meta_list = [None] * batch_size
