@@ -409,5 +409,6 @@ def prep_pointcloud(input_dict,
             "anchors_dict": anchors_dict,
             "matched_thresholds": matched_thresholds,
             "unmatched_thresholds": unmatched_thresholds,
+            "anchors_mask": anchors_mask,
         })
     return example
