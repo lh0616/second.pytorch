@@ -237,6 +237,8 @@ class VoxelNet(nn.Module):
         self.global_step.zero_()
 
     def loss(self, example, preds_dict):
+        box_refine = preds_dict["box_refine"]
+        cls_constraint = preds_dict["cls_constraint"]
         box_preds = preds_dict["box_preds"]
         cls_preds = preds_dict["cls_preds"]
         batch_size_dev = cls_preds.shape[0]
@@ -256,6 +258,28 @@ class VoxelNet(nn.Module):
         cls_targets = cls_targets.unsqueeze(-1)
         self.end_timer("prepare weight forward")
         self.start_timer("create_loss forward")
+        loc_loss_coarse, cls_loss_coarse = create_loss(
+            self._loc_loss_ftor,
+            self._cls_loss_ftor,
+            box_preds=box_refine,
+            cls_preds=cls_constraint,
+            cls_targets=cls_targets,
+            cls_weights=cls_weights * importance,
+            reg_targets=reg_targets,
+            reg_weights=reg_weights * importance,
+            num_class=self._num_class,
+            encode_rad_error_by_sin=self._encode_rad_error_by_sin,
+            encode_background_as_zeros=self._encode_background_as_zeros,
+            box_code_size=self._box_coder.code_size,
+            sin_error_factor=self._sin_error_factor,
+            num_direction_bins=self._num_direction_bins,
+        )
+        loc_loss_coarse_reduced = loc_loss_coarse.sum() / batch_size_dev
+        loc_loss_coarse_reduced *= self._loc_loss_weight
+        cls_loss_coarse_reduced = cls_loss_coarse.sum() / batch_size_dev
+        cls_loss_coarse_reduced *= self._cls_loss_weight
+        loss_coarse = loc_loss_coarse_reduced + cls_loss_coarse_reduced
+
         loc_loss, cls_loss = create_loss(
             self._loc_loss_ftor,
             self._cls_loss_ftor,
@@ -279,7 +303,7 @@ class VoxelNet(nn.Module):
         cls_neg_loss /= self._neg_cls_weight
         cls_loss_reduced = cls_loss.sum() / batch_size_dev
         cls_loss_reduced *= self._cls_loss_weight
-        loss = loc_loss_reduced + cls_loss_reduced
+        loss = loc_loss_reduced + cls_loss_reduced + loss_coarse
         self.end_timer("create_loss forward")
         if self._use_direction_classifier:
             dir_targets = get_direction_target(
@@ -332,9 +356,9 @@ class VoxelNet(nn.Module):
             voxel_features, coors, batch_size)
         self.end_timer("middle forward")
         self.start_timer("rpn forward")
-        preds_dict = self.rpn(spatial_features)
+        lidar_feat, preds_dict = self.rpn(spatial_features)
         self.end_timer("rpn forward")
-        return preds_dict
+        return lidar_feat, preds_dict
 
     def forward(self, example):
         """module's forward should always accept dict and return loss.
@@ -360,7 +384,7 @@ class VoxelNet(nn.Module):
         # features: [num_voxels, max_num_points_per_voxel, 7]
         # num_points: [num_voxels]
         # coors: [num_voxels, 4]
-        preds_dict = self.network_forward(voxels, num_points, coors, batch_size_dev)
+        lidar_feat, preds_dict = self.network_forward(voxels, num_points, coors, batch_size_dev)
         # need to check size.
         box_preds = preds_dict["box_preds"].view(batch_size_dev, -1, self._box_coder.code_size)
         err_msg = f"num_anchors={batch_anchors.shape[1]}, but num_output={box_preds.shape[1]}. please check size"
