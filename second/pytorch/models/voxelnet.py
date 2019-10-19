@@ -242,6 +242,7 @@ class VoxelNet(nn.Module):
         box_preds = preds_dict["box_preds"]
         cls_preds = preds_dict["cls_preds"]
         batch_size_dev = cls_preds.shape[0]
+        encode_size = box_preds.shape[-1]
         self.start_timer("loss forward")
         labels = example['labels']
         reg_targets = example['reg_targets']
@@ -256,7 +257,8 @@ class VoxelNet(nn.Module):
             anchors_mask = [None] * batch_size_dev
         else:
             anchors_mask = example["anchors_mask"].view(batch_size_dev, -1)
-        anchors_refined = self._box_coder.decode_torch(box_refine, anchors)
+        anchors_refined = self._box_coder.decode_torch(box_refine.view(batch_size_dev, -1, encode_size),
+                                                       anchors)
         targets_dict = self.target_assigner.assign(
             anchors_refined,
             anchors_dict,
