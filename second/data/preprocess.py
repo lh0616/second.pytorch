@@ -405,5 +405,9 @@ def prep_pointcloud(input_dict,
             'reg_targets': targets_dict['bbox_targets'],
             # 'reg_weights': targets_dict['bbox_outside_weights'],
             'importance': targets_dict['importance'],
+            "gt_dict": gt_dict,
+            "anchors_dict": anchors_dict,
+            "matched_thresholds": matched_thresholds,
+            "unmatched_thresholds": unmatched_thresholds,
         })
     return example

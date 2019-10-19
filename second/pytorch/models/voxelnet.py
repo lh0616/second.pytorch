@@ -242,12 +242,29 @@ class VoxelNet(nn.Module):
         box_preds = preds_dict["box_preds"]
         cls_preds = preds_dict["cls_preds"]
         batch_size_dev = cls_preds.shape[0]
-        encode_size = box_preds.shape[-1]
         self.start_timer("loss forward")
         labels = example['labels']
         reg_targets = example['reg_targets']
         importance = example['importance']
-        refined_reg_targets = reg_targets - box_refine.view(batch_size_dev, -1, encode_size)
+
+        anchors = example["anchors"]
+        anchors_mask = example["anchors_mask"]
+        gt_dict = example["gt_dict"]
+        matched_thresholds = example["matched_thresholds"]
+        unmatched_thresholds = example["unmatched_thresholds"]
+        anchors_dict = example["anchors_dict"]
+        anchors_refined = self._box_coder.decode_torch(box_refine, anchors)
+        targets_dict = self.target_assigner.assign(
+            anchors_refined,
+            anchors_dict,
+            gt_dict["gt_boxes"],
+            anchors_mask,
+            gt_classes=gt_dict["gt_classes"],
+            gt_names=gt_dict["gt_names"],
+            matched_thresholds=matched_thresholds,
+            unmatched_thresholds=unmatched_thresholds,
+            importance=gt_dict["gt_importance"])
+        reg_targets_refine = targets_dict["bbox_targets"]
 
         self.start_timer("prepare weight forward")
         cls_weights, reg_weights, cared = prepare_loss_weights(
@@ -290,7 +307,7 @@ class VoxelNet(nn.Module):
             cls_preds=cls_preds,
             cls_targets=cls_targets,
             cls_weights=cls_weights * importance,
-            reg_targets=refined_reg_targets,
+            reg_targets=reg_targets_refine,
             reg_weights=reg_weights * importance,
             num_class=self._num_class,
             encode_rad_error_by_sin=self._encode_rad_error_by_sin,
