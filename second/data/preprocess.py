@@ -41,6 +41,10 @@ def merge_second_batch(batch_list):
                         ret[key][k1].append(v1)
             for k1, v1 in ret[key].items():
                 ret[key][k1] = np.stack(v1, axis=0)
+        elif key in ["gt_dict", "anchors_dict"]:
+            ret[key] = []
+            for elem in elems:
+                ret[key].append(elem)
         elif key == 'coordinates':
             coors = []
             for i, coor in enumerate(elems):
