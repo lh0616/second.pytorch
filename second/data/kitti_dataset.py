@@ -248,6 +248,7 @@ class KittiDataset(Dataset):
                 'boxes': annos["bbox"],
                 'names': gt_names,
             }
+            res["cam"]["img_path"] = self._root_path / image_path
 
         return res
 

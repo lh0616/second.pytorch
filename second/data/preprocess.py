@@ -16,7 +16,9 @@ from second.utils import simplevis
 from second.utils.timer import simple_timer
 
 import seaborn as sns
-import matplotlib.pyplot as plt 
+import matplotlib.pyplot as plt
+from PIL import Image
+from torchvision.transforms import ToTensor,Resize
 
 def merge_second_batch(batch_list):
     example_merged = defaultdict(list)
@@ -26,7 +28,7 @@ def merge_second_batch(batch_list):
     ret = {}
     for key, elems in example_merged.items():
         if key in [
-                'voxels', 'num_points', 'num_gt', 'voxel_labels', 'gt_names', 'gt_classes', 'gt_boxes'
+                'voxels', 'num_points', 'num_gt', 'voxel_labels', 'gt_names', 'gt_classes', 'gt_boxes', 'gt_importance'
         ]:
             ret[key] = np.concatenate(elems, axis=0)
         elif key == 'metadata':
@@ -318,12 +320,17 @@ def prep_pointcloud(input_dict,
         num_points = res["num_points_per_voxel"]
         num_voxels = np.array([res["voxel_num"]], dtype=np.int64)
     metrics["voxel_gene_time"] = time.time() - t1
+    img_path = input_dict['cam']['img_path']
+    image = Image.open(str(img_path))
+    image = Resize([375, 1240])(image)  # PILimage
+    image = ToTensor()(image)
     example = {
         'voxels': voxels,
         'num_points': num_points,
         'coordinates': coordinates,
         "num_voxels": num_voxels,
         "metrics": metrics,
+        "image": image,
     }
     if calib is not None:
         example["calib"] = calib

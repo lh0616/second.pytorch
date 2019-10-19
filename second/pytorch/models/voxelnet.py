@@ -12,7 +12,7 @@ from second.pytorch.core import box_torch_ops
 from second.pytorch.core.losses import (WeightedSigmoidClassificationLoss,
                                         WeightedSmoothL1LocalizationLoss,
                                         WeightedSoftmaxClassificationLoss)
-from second.pytorch.models import middle, pointpillars, rpn, voxel_encoder
+from second.pytorch.models import middle, pointpillars, rpn, voxel_encoder, img_rpn
 from torchplus import metrics
 from second.pytorch.utils import torch_timer
 
@@ -169,6 +169,31 @@ class VoxelNet(nn.Module):
             num_groups=num_groups,
             box_code_size=target_assigner.box_coder.code_size,
             num_direction_bins=self._num_direction_bins)
+
+        # TODO: add parameters into config; add compatibility
+        img_rpn_class_name = "img_extractor_VGG16"
+        img_input_channel = 3
+        img_extractor_layer_nums = [2, 3]
+        layer_strides = [2, 2]
+        num_filters = [16, 32]
+        upsample_strides = [1, 2]
+        num_upsample_filters = [32, 32]
+        self.img_rpn = img_rpn.get_img_rpn_class(img_rpn_class_name)(
+            use_norm=True,
+            num_class=num_class,
+            img_input_channel=img_input_channel,
+            img_extractor_layer_nums=img_extractor_layer_nums,
+            layer_strides=layer_strides,
+            num_filters=num_filters,
+            upsample_strides=upsample_strides,
+            num_upsample_filters=num_upsample_filters,
+            num_anchor_per_loc=target_assigner.num_anchors_per_location,
+            encode_background_as_zeros=encode_background_as_zeros,
+            use_direction_classifier=use_direction_classifier,
+            use_groupnorm=use_groupnorm,
+            num_groups=num_groups,
+            box_code_size=target_assigner.box_coder.code_size
+        )
         self.rpn_acc = metrics.Accuracy(
             dim=-1, encode_background_as_zeros=encode_background_as_zeros)
         self.rpn_precision = metrics.Precision(dim=-1)
@@ -366,7 +391,7 @@ class VoxelNet(nn.Module):
             res["dir_loss_reduced"] = dir_loss
         return res
 
-    def network_forward(self, voxels, num_points, coors, batch_size):
+    def network_forward(self, voxels, image, num_points, coors, batch_size):
         """this function is used for subclass.
         you can add custom network architecture by subclass VoxelNet class
         and override this function.
@@ -389,7 +414,10 @@ class VoxelNet(nn.Module):
         self.start_timer("rpn forward")
         lidar_feat, preds_dict = self.rpn(spatial_features)
         self.end_timer("rpn forward")
-        return lidar_feat, preds_dict
+        self.start_timer("img rpn forward")
+        img_feat = self.img_rpn(image)
+        self.end_timer("img rpn forward")
+        return lidar_feat, img_feat, preds_dict
 
     def forward(self, example):
         """module's forward should always accept dict and return loss.
@@ -397,9 +425,10 @@ class VoxelNet(nn.Module):
         voxels = example["voxels"]
         num_points = example["num_points"]
         coors = example["coordinates"]
+        image = torch.from_numpy(example["image"]).cuda()
         if len(num_points.shape) == 2:  # multi-gpu
-            num_voxel_per_batch = example["num_voxels"].cpu().numpy().reshape(
-                -1)
+            num_voxel_per_batch = example["num_voxels"].cpu().numpy().reshape(-1)
+            print(num_voxel_per_batch.shape)
             voxel_list = []
             num_points_list = []
             coors_list = []
@@ -415,7 +444,7 @@ class VoxelNet(nn.Module):
         # features: [num_voxels, max_num_points_per_voxel, 7]
         # num_points: [num_voxels]
         # coors: [num_voxels, 4]
-        lidar_feat, preds_dict = self.network_forward(voxels, num_points, coors, batch_size_dev)
+        lidar_feat, img_feat, preds_dict = self.network_forward(voxels,image, num_points, coors, batch_size_dev)
         # need to check size.
         box_preds = preds_dict["box_preds"].view(batch_size_dev, -1, self._box_coder.code_size)
         err_msg = f"num_anchors={batch_anchors.shape[1]}, but num_output={box_preds.shape[1]}. please check size"
