@@ -220,6 +220,7 @@ class KittiDataset(Dataset):
             'Trv2c': calib['Tr_velo_to_cam'],
             'P2': calib['P2'],
         }
+        res["cam"]["img_path"] = self._root_path / image_path
         res["calib"] = calib_dict
         if 'annos' in info:
             annos = info['annos']
@@ -248,7 +249,6 @@ class KittiDataset(Dataset):
                 'boxes': annos["bbox"],
                 'names': gt_names,
             }
-            res["cam"]["img_path"] = self._root_path / image_path
 
         return res
 

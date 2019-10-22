@@ -28,7 +28,7 @@ def merge_second_batch(batch_list):
     ret = {}
     for key, elems in example_merged.items():
         if key in [
-                'voxels', 'num_points', 'num_gt', 'voxel_labels', 'gt_names', 'gt_classes', 'gt_boxes', 'gt_importance'
+                'voxels', 'image', 'num_points', 'num_gt', 'voxel_labels', 'gt_names', 'gt_classes', 'gt_boxes', 'gt_importance'
         ]:
             ret[key] = np.concatenate(elems, axis=0)
         elif key == 'metadata':
@@ -330,7 +330,7 @@ def prep_pointcloud(input_dict,
         'coordinates': coordinates,
         "num_voxels": num_voxels,
         "metrics": metrics,
-        "image": image,
+        "image": image.unsqueeze(0),
     }
     if calib is not None:
         example["calib"] = calib

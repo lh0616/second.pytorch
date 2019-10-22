@@ -52,11 +52,9 @@ class img_extractor_VGG16(nn.Module):
                 BatchNorm2d = change_default_args(
                     eps=1e-3, momentum=0.01)(nn.BatchNorm2d)
             Conv2d = change_default_args(bias=False)(nn.Conv2d)
-            ConvTranspose2d = change_default_args(bias=False)(nn.ConvTranspose2d)
         else:
             BatchNorm2d = Empty
             Conv2d = change_default_args(bias=True)(nn.Conv2d)
-            ConvTranspose2d = change_default_args(bias=True)(nn.ConvTranspose2d)
 
         self.block1 = Sequential()
         for i in range(img_extractor_layer_nums[0]):
@@ -82,18 +80,20 @@ class img_extractor_VGG16(nn.Module):
             self.block2.add(nn.ReLU(inplace=False))
         self.block2.add(torch.nn.MaxPool2d(kernel_size=2, stride=2))
 
-        self.deconv2 = Sequential(
-            ConvTranspose2d(
-                num_filters[1],
-                num_upsample_filters[1],
-                upsample_strides[1],
-                stride=upsample_strides[1]),
-            BatchNorm2d(num_upsample_filters[1]),
-            nn.ReLU(inplace=False),
-        )
+        self.block3 = Sequential()
+        for i in range(img_extractor_layer_nums[2]):
+            if i == 0:
+                block2_in = num_filters[1]
+            else:
+                block2_in = num_filters[2]
+            self.block2.add(
+                Conv2d(block2_in, num_filters[2], 3, padding=1))
+            self.block2.add(BatchNorm2d(num_filters[2]))
+            self.block2.add(nn.ReLU(inplace=False))
+        self.block2.add(torch.nn.MaxPool2d(kernel_size=2, stride=2))
 
     def forward(self, inputs, bev=None):  # x: [1, 3, 375, 1240]
         img_feat_block1 = self.block1(inputs)      # [1, 64, 188, 620]
         img_feat_block2 = self.block2(img_feat_block1)      # [1,128, 94, 310]
-        img_feat_deconv = self.deconv2(img_feat_block2)
-        return img_feat_deconv
+        img_feat_block3 = self.block3(img_feat_block2)
+        return img_feat_block3
